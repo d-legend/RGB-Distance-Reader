@@ -1,0 +1,121 @@
+int LEDdatapin  = 23; // DI
+int LEDlatchpin = 24; // LI
+int LEDenablepin = 25; // EI
+int LEDclockpin = 26; // CI
+const int distancePin = A0;
+const int touchPin = A3;
+int distance = 0;
+bool on, light; 
+unsigned long SB_CommandPacket;
+int SB_CommandMode;
+int SB_BlueCommand;
+int SB_RedCommand;
+int SB_GreenCommand;
+
+void setup() {
+  attachInterrupt(touchPin, doEnable, RISING);
+  pinMode(LEDdatapin, OUTPUT);
+  pinMode(LEDlatchpin, OUTPUT);
+  pinMode(LEDenablepin, OUTPUT);
+  pinMode(LEDclockpin, OUTPUT);
+  pinMode(touchPin, INPUT);
+  pinMode(distancePin, INPUT);
+  on = false;
+  light = true;
+  digitalWrite(LEDlatchpin, LOW);
+  digitalWrite(LEDenablepin, LOW);
+  Serial.begin(9600);
+}
+
+void loop() {
+  int distVal = (6762/(irRead()-9))-4;
+  float V = irRead()*(5.0/1024);
+  float x = 29.988*pow(V , -1.173);
+  distVal = map(irRead(),120,945,80,10);
+  Serial.println(distVal); 
+  Serial.println(light);
+  delay(100);
+  
+ if (light)
+ {
+    //RED
+    if (distVal < 40)
+    {  
+     SB_CommandMode = B00; // Write to PWM control registers
+     SB_RedCommand = 1023; // Maximum red
+     SB_GreenCommand = 0; // Minimum green
+     SB_BlueCommand = 0; // Minimum blue
+     SB_SendPacket();
+    }
+    //YELLOW
+    if ((distVal >=40) && (distVal <= 80))
+    {  
+     SB_CommandMode = B00; // Write to PWM control registers
+     SB_RedCommand = 1023; // Maximum red
+     SB_GreenCommand = 1023; // Maximum green
+     SB_BlueCommand = 0; // Minimum blue
+     SB_SendPacket();
+    }
+    //GREEN
+    if (distVal > 80)
+    {  
+     SB_CommandMode = B00; // Write to PWM control registers
+     SB_RedCommand = 0; // Minimum red
+     SB_GreenCommand = 1023; // Maximum green
+     SB_BlueCommand = 0; // Minimum blue
+     SB_SendPacket();
+    }
+  }
+  else
+  {
+  SB_CommandMode = B00; // Write to PWM control registers
+  SB_RedCommand = 0; // Maximum red
+  SB_GreenCommand = 0; // Minimum green
+  SB_BlueCommand = 0; // Minimum blue
+  SB_SendPacket();
+  }
+}
+
+void doEnable()
+{
+   if (on){
+    light = true;
+    on = false;
+   }
+   else if (on == false){
+    light = false;
+    on = true;    
+   }
+}
+
+int irRead() 
+{
+  int averaging = 0;
+
+  // Get a sampling of 5 readings from sensor
+  for (int i=0; i<5; i++) {
+    distance = analogRead(distancePin);
+    averaging = averaging + distance;
+    delay(55);      
+  }
+  distance = averaging / 5;      // Average out readings
+  return(distance);              // Return value
+}
+
+void SB_SendPacket() 
+{
+   SB_CommandPacket = SB_CommandMode & B11;
+   SB_CommandPacket = (SB_CommandPacket << 10)  | (SB_BlueCommand & 1023);
+   SB_CommandPacket = (SB_CommandPacket << 10)  | (SB_RedCommand & 1023);
+   SB_CommandPacket = (SB_CommandPacket << 10)  | (SB_GreenCommand & 1023);
+
+   shiftOut(LEDdatapin, LEDclockpin, MSBFIRST, SB_CommandPacket >> 24);
+   shiftOut(LEDdatapin, LEDclockpin, MSBFIRST, SB_CommandPacket >> 16);
+   shiftOut(LEDdatapin, LEDclockpin, MSBFIRST, SB_CommandPacket >> 8);
+   shiftOut(LEDdatapin, LEDclockpin, MSBFIRST, SB_CommandPacket);
+
+   delay(1); // adjustment may be necessary depending on chain length
+   digitalWrite(LEDlatchpin,HIGH); // latch data into registers
+   delay(1); // adjustment may be necessary depending on chain length
+   digitalWrite(LEDlatchpin,LOW);
+}
